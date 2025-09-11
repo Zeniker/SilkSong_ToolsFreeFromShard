@@ -39,4 +39,8 @@
       <Private>false</Private>
     </Reference>    
   </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(HollowKnightBase)' != ''">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(HollowKnightBase)\BepInEx\plugins\" />
+  </Target>
 </Project>
