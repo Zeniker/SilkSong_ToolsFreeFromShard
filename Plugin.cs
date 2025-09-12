@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -17,31 +19,71 @@ public class Plugin : BaseUnityPlugin
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
     }
 
-    [HarmonyPatch(typeof(PlayerData), "TakeShards")]
+    [HarmonyPatch(typeof(ToolItemManager), "TryReplenishTools")]
     [HarmonyPrefix]
-    private static void TakeShardsPrefix(PlayerData __instance, ref int amount)
+    private static bool TryReplenishToolsPrefix(bool __result)
     {
-        amount = 0;
+
+        bool itemsHaveBeenReplenished = false;
+
+        if (string.IsNullOrEmpty(PlayerData.instance.CurrentCrestID))
+        {            
+            return true;
+        }
+
+        List<ToolItem> currentEquippedTools = GetCurrentEquippedTools();
+        if (currentEquippedTools == null)
+        {            
+            return true;
+        }
+
+        currentEquippedTools.RemoveAll((ToolItem tool) => tool == null || !tool.IsAutoReplenished());
+
+        foreach (ToolItem item in currentEquippedTools)
+        {
+            if (item.ReplenishResource != ReplenishResources.Shard)
+            {
+                continue;
+            }
+
+            if (item is ToolItemStatesLiquid)
+            {
+                continue;
+            }
+
+            ToolItemsData.Data toolData = PlayerData.instance.GetToolData(item.name);
+            int toolStorageAmount = ToolItemManager.GetToolStorageAmount(item);
+
+            if (toolStorageAmount > toolData.AmountLeft)
+            {
+                toolData.AmountLeft = toolStorageAmount;
+                PlayerData.instance.Tools.SetData(item.name, toolData);
+                itemsHaveBeenReplenished = true;
+
+                ToolItemManager.ReportAllBoundAttackToolsUpdated();
+    	        ToolItemManager.SendEquippedChangedEvent(force: true);
+            }            
+
+        }
+
+        if (itemsHaveBeenReplenished)
+        {
+            __result = true;
+        }
+
+        return true;
+
     }
 
-    // [HarmonyPatch(typeof(ToolItem), "ReloadSingle")]
-    // [HarmonyPrefix]
-    // private static void ReloadSinglePrefix(ToolItem __instance, ref int amount)
-    // {                
-    //     ToolItemsData.Data savedData = __instance.SavedData;
-    //     savedData.AmountLeft++;
-    //     int toolStorageAmount = ToolItemManager.GetToolStorageAmount(__instance);
-    //     if (savedData.AmountLeft > toolStorageAmount)
-    //     {
-    //         savedData.AmountLeft = toolStorageAmount;
-    //     }
+    private static List<ToolItem> GetCurrentEquippedTools()
+    {
+        List<ToolItem> obj = ToolItemManager.GetEquippedToolsForCrest(PlayerData.instance.CurrentCrestID) ?? new List<ToolItem>();
 
-    //     __instance.SavedData = savedData;
-    //     if (__instance.ReplenishResource == ReplenishResources.Money)
-    //     {
-    //         CurrencyManager.TakeCurrency(1, (CurrencyType)__instance.ReplenishResource);
-    //     }
-        
-    // }
+        IEnumerable<ToolItem> collection = from data in PlayerData.instance.ExtraToolEquips.GetValidDatas((ToolCrestsData.SlotData data) => !string.IsNullOrEmpty(data.EquippedTool))
+                                           select ToolItemManager.GetToolByName(data.EquippedTool);
+        obj.AddRange(collection);
+
+        return obj;
+    }
 
 }
