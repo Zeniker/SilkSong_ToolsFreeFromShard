@@ -41,6 +41,10 @@ public class Plugin : BaseUnityPlugin
 
         foreach (ToolItem item in currentEquippedTools)
         {
+            if (item.ReplenishResource != ReplenishResources.Shard && item is not ToolItemStatesLiquid)
+            {
+                continue;
+            }
 
             ToolItemsData.Data toolData = PlayerData.instance.GetToolData(item.name);
             int toolStorageAmount = ToolItemManager.GetToolStorageAmount(item);
